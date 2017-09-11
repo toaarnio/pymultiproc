@@ -1,10 +1,12 @@
 #!/usr/bin/python -B
 
+from __future__ import print_function
+
 import sys, os, signal
 import multiprocessing
 import tempfile
 
-def run(func, argList, nproc=None, timeout=600):
+def run(func, argList, nproc=None, timeout=3600):
     """
     Executes the given function for each element of the given array of arguments.
     A separate process is launched for each invocation. Each element in argList is
@@ -43,7 +45,7 @@ def _runBuffered(func):
     then writes it all to stdout at once. This makes console output readable when
     multiple processes are writing to stdout/stderr at the same time.
     """
-    with tempfile.NamedTemporaryFile(delete=True) as tmpfile:
+    with tempfile.NamedTemporaryFile(mode="w+t", delete=True) as tmpfile:
         try:
             stdout = sys.stdout
             stderr = sys.stderr
@@ -56,9 +58,10 @@ def _runBuffered(func):
         finally:
             sys.stdout = stdout
             sys.stderr = stderr
+            tmpfile.flush()
             tmpfile.seek(0)
             log = tmpfile.read()
-            print log,
+            print(log, end='')
             sys.stdout.flush()
 
 def _run(args):
@@ -79,17 +82,28 @@ if __name__ == "__main__":
     import unittest
 
     class _TestMultiproc(unittest.TestCase):
+
         def test_run(self):
             args = [9, 3, 8, 1, 33]
             expected = [18, 6, 16, 2, 66]
             results = run(_testfunc, args)
             self.assertEqual(results, expected)
 
+        def test_run_with_print(self):
+            args = [1, 2, 3, 4, 5]
+            expected = [2, 4, 6, 8, 10]
+            results = run(_testprint, args)
+            self.assertEqual(results, expected)
+
+    def _testprint(idx):  # must be in global scope
+        print("This is a print statement in child process #%d."%(idx))
+        return idx * 2
+
     def _testfunc(v):  # must be in global scope
         import time, random  # randomize ordering
         time.sleep(random.random())
         return v * 2
 
-    print "--" * 35
+    print("--" * 35)
     suite = unittest.TestLoader().loadTestsFromTestCase(_TestMultiproc)
     unittest.TextTestRunner(verbosity=0).run(suite)

@@ -95,6 +95,10 @@ if __name__ == "__main__":
             results = run(_testprint, args)
             self.assertEqual(results, expected)
 
+        def test_exceptions(self):
+            args = [1, 2, 3, 4, 5]
+            self.assertRaises(ValueError, lambda: run(_testexc, args))
+
     def _testprint(idx):  # must be in global scope
         print("This is a print statement in child process #%d."%(idx))
         return idx * 2
@@ -103,6 +107,10 @@ if __name__ == "__main__":
         import time, random  # randomize ordering
         time.sleep(random.random())
         return v * 2
+
+    def _testexc(idx):
+        print("This is child process #%d raising a ValueError."%(idx))
+        raise ValueError("This is an intentional exception from child process #%d."%(idx))
 
     print("--" * 35)
     suite = unittest.TestLoader().loadTestsFromTestCase(_TestMultiproc)

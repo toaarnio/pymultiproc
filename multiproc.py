@@ -2,7 +2,7 @@
 
 from __future__ import print_function
 
-import sys, os, signal
+import sys, os, time, signal
 import multiprocessing
 import tempfile
 
@@ -52,9 +52,15 @@ def _runBuffered(func):
             sys.stdout = tmpfile
             sys.stderr = tmpfile
             return func()
-        except Exception as e:
-            import traceback  # embed stack trace into exception message
-            raise type(e)(traceback.format_exc())
+        except BaseException as e:
+            # The main process sometimes freezes if an exception is raised by a
+            # child process; this may be a bug in the multiprocessing module or
+            # we may be using it wrong. Either way, as a dirty workaround we're
+            # adding a short delay before raising exceptions across the process
+            # boundary. This does not fix the problem, but makes it happen much
+            # more rarely.
+            time.sleep(0.2)  # NOTE: 0.1 seconds is not enough
+            raise
         finally:
             sys.stdout = stdout
             sys.stderr = stderr

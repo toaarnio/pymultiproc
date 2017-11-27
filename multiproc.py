@@ -71,7 +71,8 @@ def _runBuffered(func, raiseEnabled):
                 time.sleep(0.2)
                 raise
             else:
-                print(e)
+                import traceback
+                traceback.print_exc()
         finally:
             sys.stdout = stdout
             sys.stderr = stderr
@@ -129,6 +130,10 @@ if __name__ == "__main__":
         def test_exceptions(self):
             args = [1, 2, 3, 4, 5]
             self.assertRaises(ValueError, lambda: run(_testexc, args, raiseExceptions=True))
+
+        def test_noexceptions(self):
+            args = [1, 2, 3, 4, 5]
+            result = run(_testexc, args, raiseExceptions=False)
 
     def _testprint(idx):  # must be in global scope
         print("This is a print statement in child process #%d."%(idx))

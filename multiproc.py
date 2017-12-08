@@ -44,6 +44,12 @@ def run(func, argList, nproc=None, timeout=3600, raiseExceptions=True):
     finally:
         pool.join()
 
+def cpu_count():
+    """
+    Returns the number of (virtual) CPU cores.
+    """
+    return multiprocessing.cpu_count()
+
 def _runBuffered(func, raiseEnabled):
     """
     Executes the given function and returns the result. Buffers all console output

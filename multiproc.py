@@ -1,16 +1,34 @@
-#!/usr/bin/python -B
+#!/usr/bin/python3 -B
 
-from __future__ import print_function
+"""
+An easy-to-use parallel task runner based on the standard 'multiprocessing' library.
+The task to be executed must be a function that is defined in the global scope, i.e.,
+it cannot be a member function of a class.
 
-import sys, os, time, signal
-import multiprocessing
-import tempfile
-import functools
+Example:
+    images = [load_image(name) for name in glob.glob("*.jpg")]
+    processed_images = multiproc.run(process_image, images)
+"""
 
-def run(func, argList, nproc=None, timeout=3600, raiseExceptions=True):
+from __future__ import print_function as _print_function
+
+import sys                        # standard library
+import signal                     # standard library
+import time                       # standard library
+import multiprocessing            # standard library
+import tempfile                   # standard library
+import functools                  # pip install functools
+
+######################################################################################
+#
+#  P U B L I C   A P I
+#
+######################################################################################
+
+def run(func, arg_list, nproc=None, timeout=3600, raise_exceptions=True):
     """
     Executes the given function for each element of the given array of arguments.
-    A separate process is launched for each invocation. Each element in argList is
+    A separate process is launched for each invocation. Each element in arg_list is
     a tuple consisting of zero or more elements that are to be expanded and passed
     as arguments to the given 'func'. Results are returned as an array of the same
     size as the input, each output element corresponding to the input element at
@@ -20,7 +38,7 @@ def run(func, argList, nproc=None, timeout=3600, raiseExceptions=True):
 
     By default, any exceptions raised by the child processes are propagated to the
     caller. Unfortunately, this is sometimes causing all processes to freeze. As a
-    workaround, exceptions can be disabled by setting raiseExceptions to False, in
+    workaround, exceptions can be disabled by setting raise_exceptions to False, in
     which case the exception and its stack trace are just printed to the console.
     """
     try:
@@ -30,15 +48,15 @@ def run(func, argList, nproc=None, timeout=3600, raiseExceptions=True):
         # the Pool; map_async() must be used instead of the blocking map(); and
         # there must be a timeout when waiting on the results, because signals
         # are otherwise ignored.
-        origHandler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        orig_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
         pool = multiprocessing.Pool(nproc)
-        signal.signal(signal.SIGINT, origHandler)
-        runner = functools.partial(_run, func, raiseEnabled=raiseExceptions)
-        mapResult = pool.map_async(runner, argList)
-        results = mapResult.get(timeout)  # wait for N seconds before terminating
+        signal.signal(signal.SIGINT, orig_handler)
+        runner = functools.partial(_run, func, raise_enabled=raise_exceptions)
+        map_results = pool.map_async(runner, arg_list)
+        results = map_results.get(timeout)  # wait for N seconds before terminating
         pool.close()
         return results
-    except BaseException as e:
+    except BaseException:
         pool.terminate()
         raise
     finally:
@@ -50,7 +68,13 @@ def cpu_count():
     """
     return multiprocessing.cpu_count()
 
-def _runBuffered(func, raiseEnabled):
+######################################################################################
+#
+#  I N T E R N A L   F U N C T I O N S
+#
+######################################################################################
+
+def _run_buffered(func, raise_enabled):
     """
     Executes the given function and returns the result. Buffers all console output
     (stdout & stderr) into a temporary file until the function has completed, and
@@ -66,14 +90,14 @@ def _runBuffered(func, raiseEnabled):
             sys.stderr = tmpfile
             result = func()
             return result
-        except BaseException as e:
+        except BaseException:
             # The main process sometimes freezes if an exception is raised by a
             # child process; this may be a bug in the multiprocessing module or
             # we may be using it wrong. Either way, as a dirty workaround we're
             # adding a short delay before raising exceptions across the process
             # boundary. This does not fix the problem, but makes it happen much
             # more rarely.
-            if raiseEnabled:
+            if raise_enabled:
                 time.sleep(0.2)
                 raise
             else:
@@ -88,11 +112,9 @@ def _runBuffered(func, raiseEnabled):
             print(log, end='')
             sys.stdout.flush()
 
-def _run(func, args, raiseEnabled):
-   if type(args) is tuple:
-       return _runBuffered(lambda: func(*args), raiseEnabled)
-   else:
-       return _runBuffered(lambda: func(args), raiseEnabled)
+def _run(func, args, raise_enabled):
+    func_with_args = lambda: func(*args) if isinstance(args, tuple) else func(args)
+    return _run_buffered(func_with_args, raise_enabled)
 
 ######################################################################################
 #
@@ -102,9 +124,10 @@ def _run(func, args, raiseEnabled):
 
 if __name__ == "__main__":
 
+    # pylint: disable=missing-docstring
+
     import unittest
-    import time, random, re
-    import numpy as np
+    import random
 
     class _TestMultiproc(unittest.TestCase):
 
@@ -115,7 +138,7 @@ if __name__ == "__main__":
             self.assertEqual(results, expected)
 
         def test_run_multiarg(self):
-            args = [(1,2), (3,4)]
+            args = [(1, 2), (3, 4)]
             expected = [5, 25]
             results = run(_testmultiarg, args)
             self.assertEqual(results, expected)
@@ -129,34 +152,35 @@ if __name__ == "__main__":
         def test_partial(self):
             args = [1, 2, 3, 4, 5]
             expected = [101, 104, 109, 116, 125]
-            partialfunc = functools.partial(_testmultiarg, v2=10)
+            partialfunc = functools.partial(_testmultiarg, val2=10)
             results = run(partialfunc, args)
             self.assertEqual(results, expected)
 
         def test_exceptions(self):
             args = [1, 2, 3, 4, 5]
-            self.assertRaises(ValueError, lambda: run(_testexc, args, raiseExceptions=True))
+            self.assertRaises(ValueError, lambda: run(_testexc, args, raise_exceptions=True))
 
-        def test_noexceptions(self):
+        @staticmethod
+        def test_noexceptions():
             args = [1, 2, 3, 4, 5]
-            result = run(_testexc, args, raiseExceptions=False)
+            run(_testexc, args, raise_exceptions=False)
 
     def _testprint(idx):  # must be in global scope
         print("This is a print statement in child process #%d."%(idx))
         return idx * 2
 
-    def _testfunc(v):  # must be in global scope
+    def _testfunc(val):  # must be in global scope
         time.sleep(random.random())
-        return v * 2
+        return val * 2
 
-    def _testmultiarg(v1, v2):
-        result = v1 * v1 + v2 * v2
+    def _testmultiarg(val1, val2):  # must be in global scope
+        result = val1 * val1 + val2 * val2
         return result
 
-    def _testexc(idx):
+    def _testexc(idx):  # must be in global scope
         print("This is child process #%d raising a ValueError."%(idx))
         raise ValueError("This is an intentional exception from child process #%d."%(idx))
 
     print("--" * 35)
-    suite = unittest.TestLoader().loadTestsFromTestCase(_TestMultiproc)
-    unittest.TextTestRunner(verbosity=0).run(suite)
+    SUITE = unittest.TestLoader().loadTestsFromTestCase(_TestMultiproc)
+    unittest.TextTestRunner(verbosity=0).run(SUITE)
